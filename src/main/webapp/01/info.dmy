@@ -1,0 +1,15 @@
+	<html>
+	<head>
+	<style type="text/css">
+	pre{
+	background-color:red;
+	}
+	</style>
+		<body>
+				<pre>
+					language : @language@
+					country : @country@
+					timeZone : @timeZone@
+				</pre>
+		</body>
+		</html>

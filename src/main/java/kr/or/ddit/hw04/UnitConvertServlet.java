@@ -1,0 +1,116 @@
+package kr.or.ddit.hw04;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonIOException;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import kr.or.ddit.hw04.domain.Unit;
+import kr.or.ddit.hw04.domain.UnitType;
+import kr.or.ddit.hw04.dto.ConversionRequest;
+import kr.or.ddit.hw04.dto.ConversionResponse;
+import kr.or.ddit.hw04.dto.ErrorResponse;
+import kr.or.ddit.hw04.exception.UnitConversionException;
+import kr.or.ddit.hw04.service.UnitConversionService;
+import kr.or.ddit.hw04.validation.ConversionValidator;
+
+@WebServlet("/hw04/convert")
+public class UnitConvertServlet extends HttpServlet {
+
+	@Override
+	protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+		HttpSession session=req.getSession();
+		ConversionResponse respDto=(ConversionResponse)session.getAttribute("convertResult");
+		session.removeAttribute("convertResult");//flash attribute
+		req.setAttribute("convertResult",respDto);
+		Map<UnitType,List<Unit>> unitGroup = Arrays.stream(Unit.values())
+				.collect(Collectors.groupingBy(u ->{
+					System.out.println(u);
+					return u.getType();
+				}));
+		req.setAttribute("unitGroup", unitGroup);
+		String view="/WEB-INF/views/hw04/convert.jsp";
+		req.getRequestDispatcher(view).forward(req, resp);
+	}
+	@Override
+	protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+		int status=200;
+		String value=req.getParameter("value");
+		String from=req.getParameter("from");
+		String to=req.getParameter("to");
+
+
+		ConversionRequest reqDto =null;
+		Object nativeTarget =null;
+		try {
+			//2. 요청 검증 후 request DTO 반환
+			reqDto= ConversionValidator.validate(value,from,to);
+			//3. 실제 변환 로직 사용 , REQUEST DTO 를 넘겨서 RESPONSE DTO 반환	
+			UnitConversionService service=new UnitConversionService();
+			ConversionResponse respDto=	service.convert(reqDto, req.getLocale());
+			//4. RESPONSE DTO 직렬호ㅏ해 json으로 응답
+			nativeTarget=respDto;
+
+
+		}catch(UnitConversionException e) {
+			status=400;
+			nativeTarget	 =new ErrorResponse(400, e.getMessage(), reqDto);
+
+
+		}
+
+		String accept=req.getHeader("accept");
+		if(accept.contains("json")) {
+			resp.setStatus(status);		
+			handleJson(nativeTarget, resp);
+			return;
+		}
+		if(status !=200) {
+			resp.sendError(status);
+			return;
+		}
+		if(accept.contains("html")) {
+		//	req.setAttribute("convertResult", nativeTarget);
+			req.getSession().setAttribute("convertResult", nativeTarget);
+			handleHtml(req,resp);
+		}else {
+			resp.sendError(HttpServletResponse.SC_NOT_ACCEPTABLE);
+		}
+	}
+
+	private void handleHtml(HttpServletRequest req, HttpServletResponse resp)throws ServletException,IOException{
+	//	String view="/WEB-INF/views/hw04/convert.jsp";
+		 //req.getRequestDispatcher(view).forward(req,resp);
+		String location =req.getContextPath()+"/hw04/convert";
+		resp.sendRedirect(location);
+	
+	}
+
+	private void handleJson(Object nativeTarget , HttpServletResponse resp) throws JsonIOException, IOException{
+		resp.setContentType("application/json");
+		new Gson().toJson(nativeTarget,resp.getWriter());
+	}
+
+}
+
+
+/*
+ * 1. 3개의 파라미터 수신 (value,from,to)
+ * 
+ * 2. 요청 검증 후 request DTO 반환
+ * 
+ * 3. 실제 변환 로직 사용 , REQUEST DTO 를 넘겨서 RESPONSE DTO 반환
+ * 
+ * 4. RESPONSE DTO 직렬호ㅏ해 json으로 응답
+ * 
+ * -----검증에 통과하지 못하면? 예외를 캐치하고 400에러로 변환 */
